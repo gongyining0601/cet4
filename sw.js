@@ -1,4 +1,4 @@
-﻿/* CET4 打卡应用 Service Worker
+/* CET4 打卡应用 Service Worker
  * 策略：外壳（index/core/manifest/图标）网络优先、离线兜底缓存；
  * 题库 bank/*.js 缓存优先（内容极少变化，二次打开秒开）。
  * 版本号单点化：VERSION 来自 version.js（importScripts），与 index.html 的 core.js?v= 同源，
@@ -9,7 +9,7 @@
  */
 try { importScripts('./version.js'); } catch (e) { }
 var VERSION = self.CET4_VERSION || 'cet4-v1';
-var SHELL = ['./', './index.html', './version.js', './core.js?v=' + encodeURIComponent(VERSION), './manifest.json', './icon-192.png', './icon-512.png', './bank/meta.js', './hls.min.js', './bank/listeningMeta.js',
+var SHELL = ['./', './index.html', './version.js', './core.js?v=' + encodeURIComponent(VERSION), './manifest.json', './icon-192.png', './icon-512.png', './bank/meta.js', './bank/listeningMeta.js',
   './bank/img/2015-12-1.jpg', './bank/img/2015-12-2.jpg', './bank/img/2015-12-3.jpg',
   './bank/img/2021-06-1.jpg', './bank/img/2021-06-2.jpg', './bank/img/2021-06-3.jpg'];
 /* 卷清单来自 meta.js（顶层 IIFE 挂到 self.CET4_META）：activate 后分批后台预热。
