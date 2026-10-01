@@ -1,4 +1,4 @@
-﻿/* CET4 打卡应用 · 核心逻辑（纯函数，可在 Node 中测试）
+/* CET4 打卡应用 · 核心逻辑（纯函数，可在 Node 中测试）
    数据结构：
    state = {
      version: 1,
@@ -44,7 +44,7 @@
   CORE.PLAN_TARGET = 25;
   CORE.PLAN_CAP = 40;
   CORE.REVIEW_CAP = 10;
-  CORE.PLAN_VERSION = 8; // 清单结构版本：低于此版本的旧版 plan 会被 ensurePlan 丢弃重算（v8=听力篇边界改读 listeningMeta 实测分片；v7=主题型日+听力每天保底+听力组按篇对齐）
+  CORE.PLAN_VERSION = 9; // 清单结构版本：低于此版本的旧版 plan 会被 ensurePlan 丢弃重算（v9=四级听力分片改为官方烘焙数据，篇结构修正为3新闻+2长对话+3短文；v8=听力篇边界读 listeningMeta；v7=主题型日+听力篇对齐）
 
   // ---------- 题库索引 ----------
   CORE.allQuestions = function (banks) {
