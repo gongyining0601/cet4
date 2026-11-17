@@ -547,6 +547,9 @@
       ph = ph.trim();
       if (!/^\d{4}$/.test(ph)) { alert('编号格式不对（要 4 位数字），没切换'); return; }
       if (!storeSet(USER_KEY, ph)) { alert('这台浏览器不允许保存数据（隐私模式或空间已满），没切换'); return; }
+      // 切换编号 = 切换身份：立即清掉旧编号的内存令牌并停掉在途同步，
+      // 避免同页切换时用 A 的令牌去读写 B 的云端分片（安全修复，与 sync.js 的 tokenKeyOf/detach 配套）
+      if (window.CET_SYNC && CET_SYNC.detach) CET_SYNC.detach();
       if (storeDisabled) { startSession(ph); toast('已切换到 ' + maskPhone(ph) + '（本窗口禁止本地存储，刷新后请重新输入）'); return; } // N-SEC-2
       location.reload();
     };
@@ -562,6 +565,19 @@
   // 改成"首次失败提示 + 常驻横幅"，并且把成败返回给调用方，让完成提示说实话。
   var saveFailed = false;
   var essaySaveTimer = null, essayLastSave = 0; // S1：作文保存防抖/兜底
+  // S1-补：卸载/切后台时强制落盘待发的写译草稿（与 CET6 共享修复，防漏修闸门要求两仓都命中）。
+  // 防抖 300ms 与 1s 兜底都假设"用户还会继续输入"，但写完最后一段立刻刷新/关标签页/切后台时，
+  // 最后几段还挂在定时器里会丢。pagehide + visibilitychange(hidden) 双保险，重复触发天然幂等。
+  function flushEssaySave() {
+    if (!essaySaveTimer) return;
+    clearTimeout(essaySaveTimer);
+    essaySaveTimer = null;
+    try { save(); essayLastSave = Date.now(); } catch (e) { }
+  }
+  document.addEventListener('pagehide', flushEssaySave);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') flushEssaySave();
+  });
   function showSaveWarn(msg) {
     var b = $('saveWarn');
     if (!b) return;
