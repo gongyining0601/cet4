@@ -1973,30 +1973,69 @@
   // ---------- 按需加载（架构级）：meta 骨架常驻；卷正文按需动态加载 ----------
   var loadedPapers = {};
   var paperInflight = {}; // pid -> 等待回调队列：同一卷并发请求只发一次（去重）
-  var PAPER_LOAD_TIMEOUT = 15000; // 15s 超时：弱网下不再无限挂起"正在加载题库卷…"
+  var PAPER_LOAD_TIMEOUT = 30000; // 弱网兜底：147KB 卷实测 1.6~20s，15s 会误杀正常加载
   function loadPaperScript(pid, cb, onErr) {
     if (loadedPapers[pid]) { cb && cb(); return; }
     if (paperInflight[pid]) { paperInflight[pid].push({ cb: cb, onErr: onErr }); return; }
     paperInflight[pid] = [{ cb: cb, onErr: onErr }];
-    var done = false;
+    var done = false, pendingScript = null, timer;
     function settle(ok) {
       if (done) return; done = true;
+      clearTimeout(timer);
+      if (!ok && pendingScript && pendingScript.parentNode) {
+        try { pendingScript.parentNode.removeChild(pendingScript); } catch (e) { }
+      }
       var q = paperInflight[pid]; delete paperInflight[pid];
       (q || []).forEach(function (w) { if (ok) { w.cb && w.cb(); } else { w.onErr && w.onErr(pid); } });
     }
-    var s = document.createElement('script');
-    s.src = 'bank/cet4-' + pid + '.js';
-    var timer = setTimeout(function () {
-      settle(false);
-      try { if (s.parentNode) s.parentNode.removeChild(s); } catch (e) { }
-    }, PAPER_LOAD_TIMEOUT);
-    s.onload = function () {
-      clearTimeout(timer);
-      loadedPapers[pid] = 1; // 即使超时后才到，也标记已注入，防止重复 append 同卷脚本
-      settle(true);
-    };
-    s.onerror = function () { clearTimeout(timer); settle(false); };
-    document.head.appendChild(s);
+    timer = setTimeout(function () { settle(false); }, PAPER_LOAD_TIMEOUT);
+    var url = 'bank/cet4-' + pid + '.js';
+
+    /* 2026-11-12 线上缺陷修复（自 CET6 同源移植）：大卷用 <script src> 动态注入时，
+       在部分网络/CDN 组合下请求会一直挂住，onload / onerror 都不触发，超时后
+       只能报错退出——答题区永远出不来（CSP 探针在 https 下实测复现：banks=0）。
+       同源 fetch 取同一文件实测稳定成功，故 http(s) 下改走
+       "fetch 文本 + 内联 script 执行"（CSP 已允许 'unsafe-inline'，无需 unsafe-eval）；
+       file://、老浏览器或 fetch 失败时仍回退原 <script src>，
+       本地测试与 Service Worker 离线路径不受影响。 */
+    function viaScriptTag() {
+      if (done) return;
+      var s = document.createElement('script');
+      pendingScript = s;
+      s.src = url;
+      s.onload = function () {
+        loadedPapers[pid] = 1; // 即使超时后才到，也标记已注入，防止重复 append 同卷脚本
+        settle(true);
+      };
+      s.onerror = function () { settle(false); };
+      document.head.appendChild(s);
+    }
+    function injectCode(code) {
+      try {
+        var s = document.createElement('script');
+        s.textContent = code;
+        document.head.appendChild(s);
+        // inline script 若被 CSP 拦掉不会抛异常，必须回查卷是否真的入列
+        var hit = (window.CET4_BANKS || []).some(function (b) { return b && b.id === pid; });
+        if (!hit) { try { s.parentNode.removeChild(s); } catch (e) { } viaScriptTag(); return; }
+        loadedPapers[pid] = 1;
+        settle(true);
+      } catch (e) { viaScriptTag(); }
+    }
+    if (location.protocol !== 'file:' && typeof fetch === 'function') {
+      // 不再单独 abort：本机到 Pages 的 147KB 卷实测 1.6~20s 波动，
+      // 过早 abort 会立刻回退到 <script src>（该通道在本环境本就挂死），
+      // 把「慢」变成「必失败」。统一交给 PAPER_LOAD_TIMEOUT 兜底。
+      fetch(url).then(function (resp) {
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.text();
+      }).then(function (code) {
+        if (!code || code.indexOf('CET4_BANKS') < 0) throw new Error('卷脚本内容异常');
+        injectCode(code);
+      }).catch(function () { viaScriptTag(); });
+    } else {
+      viaScriptTag();
+    }
   }
   function papersOfQids(qids) {
     var out = {};
